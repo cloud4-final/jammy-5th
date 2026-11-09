@@ -1,0 +1,17 @@
+---
+- name: KVM과 libvirt 호스트 준비
+  hosts: onprem
+  become: true
+
+  tasks:
+    - name: KVM과 VM 관리 패키지 확인
+      ansible.builtin.apt:
+        name:
+          - qemu-kvm
+          - libvirt-daemon-system
+          - libvirt-clients
+          - virtinst
+          - cloud-image-utils
+          - cpu-checker
+          - python3-lxml
+        state: present
