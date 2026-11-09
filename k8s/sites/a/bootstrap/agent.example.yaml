@@ -1,0 +1,10 @@
+# Reference only; keep join-token outside Git with root-only permissions.
+server: https://REPLACE_A_CP_IP:6443
+token-file: /etc/rancher/k3s/join-token
+node-name: a-app-01
+node-ip: REPLACE_A_APP1_IP
+flannel-iface: ens2
+node-label:
+  - jammy.io/site=site-a
+  - jammy.io/role=app
+
