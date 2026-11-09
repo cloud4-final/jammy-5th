@@ -1,0 +1,115 @@
+# A deployment manifest. Requires namespace jammy and ghcr-pull/collector-db Secrets.
+# Source: collector commit 6178eb1. No migration, Ingress or network rule changes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mobility-collector
+  labels:
+    app: mobility-collector
+  namespace: jammy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mobility-collector
+  template:
+    metadata:
+      labels:
+        app: mobility-collector
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '8000'
+        prometheus.io/path: /metrics
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      imagePullSecrets:
+      - name: ghcr-pull
+      containers:
+      - name: collector
+        image: ghcr.io/cloud4-final/jammy-collector:sha-6178eb1@sha256:f68378baa84455d21fd8d5285a2b95d50ba2718558ee11f64bf4bd965b70fdf3
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          runAsUser: 10001
+          runAsGroup: 10001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        env:
+        - name: SITE_ID
+          value: jammy-a
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: collector-db
+              key: DATABASE_URL
+        - name: DATABASE_READ_URL
+          valueFrom:
+            secretKeyRef:
+              name: collector-db
+              key: DATABASE_READ_URL
+        - name: DB_POOL_MIN
+          value: '1'
+        - name: DB_POOL_MAX
+          value: '10'
+        - name: DEPLOY_ENV
+          value: dev
+        - name: OTEL_SERVICE_NAME
+          value: mobility-collector
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                - a-app-01
+                - a-app-02
+      automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mobility-collector
+  labels:
+    app: mobility-collector
+  namespace: jammy
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: mobility-collector
+
