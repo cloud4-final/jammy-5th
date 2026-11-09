@@ -1,0 +1,11 @@
+---
+# libvirt 저장소가 별도로 마운트된 경로
+vm_storage_mountpoint: /var/lib/libvirt
+
+# 실제 호스트의 마운트 장치로 반드시 변경해야 합니다.
+# 예시값 그대로 사용하면 플레이북이 중단됩니다.
+expected_vm_storage_source: CHANGE_ME
+
+# libvirt 디렉터리 풀 이름과 경로
+vm_pool_name: vm-images
+vm_pool_path: /var/lib/libvirt/images

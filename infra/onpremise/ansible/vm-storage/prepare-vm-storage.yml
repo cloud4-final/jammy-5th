@@ -1,0 +1,123 @@
+---
+- name: VM 이미지 디렉터리와 libvirt 저장소 풀 준비
+  hosts: onprem
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: 필수 변수와 예시값 확인
+      ansible.builtin.assert:
+        that:
+          - vm_storage_mountpoint is defined
+          - expected_vm_storage_source is defined
+          - expected_vm_storage_source != "CHANGE_ME"
+          - vm_pool_name is defined
+          - vm_pool_path is defined
+        fail_msg: >-
+          저장소 변수를 확인하세요.
+          특히 expected_vm_storage_source는 실제 확인한 장치로 지정해야 합니다.
+
+    - name: VM 저장소 마운트 장치 확인
+      ansible.builtin.command:
+        argv:
+          - findmnt
+          - -n
+          - -o
+          - SOURCE
+          - --mountpoint
+          - "{{ vm_storage_mountpoint }}"
+      register: vm_storage_mount
+      changed_when: false
+
+    - name: 예상한 저장소가 마운트됐는지 확인
+      ansible.builtin.assert:
+        that:
+          - vm_storage_mount.stdout == expected_vm_storage_source
+        fail_msg: >-
+          VM 저장소의 마운트 장치가 예상과 다릅니다.
+          디스크와 마운트 상태를 확인한 뒤 다시 진행하세요.
+
+    - name: 현재 libvirt 저장소 풀 목록 확인
+      ansible.builtin.command:
+        argv:
+          - virsh
+          - -c
+          - qemu:///system
+          - pool-list
+          - --all
+          - --name
+      register: existing_pools
+      changed_when: false
+
+    - name: 기존 풀의 XML 확인
+      ansible.builtin.command:
+        argv:
+          - virsh
+          - -c
+          - qemu:///system
+          - pool-dumpxml
+          - "{{ vm_pool_name }}"
+      register: existing_pool_xml
+      changed_when: false
+      when: vm_pool_name in existing_pools.stdout_lines
+
+    - name: 기존 풀의 타입과 경로 읽기
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - >-
+            import json, sys, xml.etree.ElementTree as ET;
+            root = ET.fromstring(sys.stdin.read());
+            print(json.dumps({
+              "type": root.get("type"),
+              "path": root.findtext("./target/path")
+            }))
+        stdin: "{{ existing_pool_xml.stdout }}"
+      register: existing_pool_details
+      changed_when: false
+      when: vm_pool_name in existing_pools.stdout_lines
+
+    - name: 기존 풀이 예상한 타입과 경로인지 확인
+      ansible.builtin.assert:
+        that:
+          - (existing_pool_details.stdout | from_json).type == "dir"
+          - (existing_pool_details.stdout | from_json).path == vm_pool_path
+        fail_msg: >-
+          같은 이름의 libvirt 풀이 있지만 타입 또는 경로가 예상과 다릅니다.
+          기존 풀을 변경하지 않고 중단합니다.
+      when: vm_pool_name in existing_pools.stdout_lines
+
+    - name: VM 이미지 저장 디렉터리 준비
+      ansible.builtin.file:
+        path: "{{ vm_pool_path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0711"
+
+    - name: VM 이미지 저장소 풀 정의
+      community.libvirt.virt_pool:
+        command: define
+        name: "{{ vm_pool_name }}"
+        uri: qemu:///system
+        xml: |
+          <pool type='dir'>
+            <name>{{ vm_pool_name }}</name>
+            <target>
+              <path>{{ vm_pool_path }}</path>
+            </target>
+          </pool>
+      when: vm_pool_name not in existing_pools.stdout_lines
+
+    - name: VM 이미지 저장소 풀 시작
+      community.libvirt.virt_pool:
+        name: "{{ vm_pool_name }}"
+        uri: qemu:///system
+        state: active
+
+    - name: VM 이미지 저장소 풀 자동 시작 설정
+      community.libvirt.virt_pool:
+        name: "{{ vm_pool_name }}"
+        uri: qemu:///system
+        autostart: true
