@@ -43,3 +43,18 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
 output "s3_bucket_names" {
   value = { for k, b in aws_s3_bucket.this : k => b.id }
 }
+# 백업 버킷만. 현재 버전은 안 지움 (보관은 pgBackRest expire가 담당)
+resource "aws_s3_bucket_lifecycle_configuration" "backup" {
+  bucket     = aws_s3_bucket.this["backup"].id
+  depends_on = [aws_s3_bucket_versioning.this] # 버전 관리 먼저
+
+  rule {
+    id     = "pgbackrest-cleanup"
+    status = "Enabled"
+    filter { prefix = "pgbackrest/" }
+
+    noncurrent_version_expiration { noncurrent_days = 30 } # 지워진 옛 버전 30일 보관
+    expiration { expired_object_delete_marker = true }     # 남은 삭제 표시 정리
+    abort_incomplete_multipart_upload { days_after_initiation = 7 }
+  }
+}
