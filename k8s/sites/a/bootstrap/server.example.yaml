@@ -1,0 +1,18 @@
+# Reference only. Replace REPLACE_* locally; never apply placeholders.
+# Existing installation: v1.37.2+k3s1. Not an automatic installer.
+node-name: a-cp-01
+node-ip: REPLACE_A_CP_IP
+advertise-address: REPLACE_A_CP_IP
+flannel-iface: ens2
+flannel-backend: vxlan
+cluster-cidr: REPLACE_VERIFIED_POD_CIDR
+service-cidr: REPLACE_VERIFIED_SERVICE_CIDR
+write-kubeconfig-mode: "0600"
+secrets-encryption: true
+disable:
+  - traefik
+  - servicelb
+node-label:
+  - jammy.io/site=site-a
+  - jammy.io/role=control-plane
+
