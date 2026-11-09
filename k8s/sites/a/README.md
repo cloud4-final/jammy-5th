@@ -20,12 +20,12 @@ A CP 1대·App 1대에 구성한 k3s와 collector의 공유용 배포 설정이�
 
 | Secret | 키/형식 | 용도 |
 |---|---|---|
-| ghcr-pull | kubernetes.io/dockerconfigjson | private GHCR 읽기 권한 |
+| ghcr-pull | type: `kubernetes.io/dockerconfigjson`, 필수 data 키: `.dockerconfigjson` | private GHCR 읽기 권한 |
 | collector-db | DATABASE_URL | A jammy DB의 jammy_writer, sslmode=require |
 | collector-db | DATABASE_READ_URL | 초기 A 시험은 같은 A DB의 jammy_reader, sslmode=require |
 
 접속 주소는 내부 인계 문서를 따른다. `public.events`는 이미 준비됐으므로 migrate·DDL·초기화 Job을 실행하지 않는다.
-두 Pod 각각 DB_POOL_MAX=10이므로 단일 연결 풀 기준 최대 20개이며, 앱의 읽기/쓰기 풀 구성이 별도이면 합산해서 DB 여유를 확인한다.
+배포 버전 `6178eb1`은 읽기·쓰기 연결 풀을 각각 생성하고 각 풀에 `DB_POOL_MAX=10`을 적용한다. 정상 2 Pod 기준 읽기 최대 20개 + 쓰기 최대 20개 = **A DB에 최대 40개**다(워커 1개/Pod 기준). 기본 RollingUpdate의 surge Pod 1개까지 포함하면 3 Pod·최대 60개이며 종료 중 Pod가 연결을 유지하면 일시적으로 더 늘 수 있다. 다른 앱·복제·관측·관리 연결과 PostgreSQL 예약 연결 여유까지 현서 담당자와 확인한다. URL이 같은 DB를 가리켜도 두 풀은 합쳐지지 않는다.
 
 ## 검토와 적용
 
@@ -59,6 +59,31 @@ curl --fail --max-time 5 'http://127.0.0.1:18080/api/v1/events?limit=1'
 
 시험 후 port-forward를 종료한다. 한 Pod로 전달되므로 외부 입구·부하 분산 성능을 증명하지 않는다.
 scrape annotation만으로 중앙 Prometheus 수집이 보장되지 않는다. OTEL exporter 주소도 설정하지 않았으므로 trace 연동 완료가 아니다.
+
+
+## 쓰기 경로 별도 확인
+
+배포 버전의 `/ready`는 읽기 풀의 `SELECT 1`만 확인한다. Ready/GET 성공만으로 writer의 연결·INSERT 권한을 확인한 것으로 처리하지 않는다. 아래 시험은 **쓰기 가능한 시험 범위와 시간을 담당자와 확인한 후에만** 수행한다.
+
+1. 승인된 시험 이벤트 JSON 파일을 준비한다. 필수 필드는 `event_id`, `region`, `vehicle_id`이며 `region`은 `site-a/site-b/site-c/aws` 중 하나다. 이번 실행의 새 ID와 기대 업무 필드를 기록하고 기존 ID/원본 자료를 덮어쓰지 않는다.
+2. 위 localhost port-forward를 유지한 상태에서 아래 명령을 실행한다. `EVENT_FILE`은 승인된 JSON 파일 경로, `EVENT_ID`는 그 파일의 ID다. ID는 URL 경로에 안전한 영문·숫자·하이픈으로 준비한다.
+
+```sh
+curl --silent --show-error --max-time 10 -o write-result.json -w '%{http_code}\n' \
+  -H 'Content-Type: application/json' --data-binary "@${EVENT_FILE}" \
+  http://127.0.0.1:18080/api/v1/events
+# 같은 파일을 재전송해 중복 처리 확인
+curl --silent --show-error --max-time 10 -o duplicate-result.json -w '%{http_code}\n' \
+  -H 'Content-Type: application/json' --data-binary "@${EVENT_FILE}" \
+  http://127.0.0.1:18080/api/v1/events
+curl --silent --show-error --max-time 10 -o readback-result.json -w '%{http_code}\n' \
+  "http://127.0.0.1:18080/api/v1/events/${EVENT_ID}"
+```
+
+3. **신규 201/accepted → 재전송 200/duplicate → 조회 200**과 동일 event_id·업무 필드를 대조한다. HTTP 200만으로 합격 처리하지 않는다. 첫 요청이 duplicate면 신규 쓰기 증거가 아니므로 기존 ID 여부를 확인한다. 타임아웃은 미저장을 뜻하지 않으므로 같은 ID 조회로 상태를 확인한 뒤 재시도한다.
+4. 실패·503이면 배포 인수를 완료 처리하지 않고 writer 설정·권한·DB 여유를 확인한다. 결과에는 시각·대상·이미지·event_id·응답 코드를 기록하고 파일은 내부 보관한다. 자동 DELETE/migrate/테이블 초기화는 하지 않는다.
+
+이 절차는 향후 재배포 시 확인용이다. 이번 리뷰 보완에서는 실제 POST를 재실행하지 않았으며, 기존 10건 실환경 시험 증거와 구분한다. [고정 버전 DB 코드](https://github.com/cloud4-final/jammy-collector/blob/6178eb1/src/db.py)와 [API 코드](https://github.com/cloud4-final/jammy-collector/blob/6178eb1/src/main.py)를 근거로 작성했다.
 
 ## 테스트 담당자 권한 인계
 
