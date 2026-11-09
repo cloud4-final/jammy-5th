@@ -1,0 +1,18 @@
+expected_hostname: example-host
+
+vm_name: example-vm
+vm_vcpus: 2
+vm_memory_mib: 4096
+vm_disk_gib: 20
+
+vm_bridge: example-bridge
+vm_ip_cidr: 192.0.2.10/24
+vm_gateway: 192.0.2.1
+vm_dns: 192.0.2.53
+vm_mac: "52:54:00:aa:bb:cc"
+
+vm_user: ubuntu
+
+base_image: /var/lib/libvirt/base-images/ubuntu-24.04-server-cloudimg-amd64.img
+vm_disk_dir: /var/lib/libvirt/images
+vm_seed_dir: /var/lib/libvirt/cloud-init

@@ -1,0 +1,218 @@
+---
+- name: 온프레미스 VM 생성
+  hosts: all
+  become: true
+  gather_facts: false
+
+  vars_files:
+    - vm-vars.yml
+
+  vars:
+    vm_disk_path: "{{ vm_disk_dir }}/{{ vm_name }}.qcow2"
+    vm_work_dir: "{{ vm_seed_dir }}/{{ vm_name }}"
+    vm_seed_path: "{{ vm_disk_dir }}/{{ vm_name }}-seed.iso"
+
+    # WSL의 공개키를 읽는다. 개인키는 읽거나 복사하지 않는다.
+    vm_ssh_public_key: "{{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'HOME') + '/.ssh/id_ed25519.pub') }}"
+
+    # 실수로 VM이 생성되지 않도록 기본값을 false로 둔다.
+    confirm_vm_create: false
+
+  tasks:
+    - name: 생성 실행 여부 확인
+      ansible.builtin.assert:
+        that:
+          - confirm_vm_create | bool
+          - ansible_play_hosts_all | length == 1
+        fail_msg: >-
+          VM 생성이 잠겨 있습니다.
+          네트워크와 코드를 검토한 뒤 생성 시점에만 잠금을 해제하세요.
+
+    - name: 대상 호스트 이름 확인
+      ansible.builtin.command:
+        argv:
+          - hostname
+      register: target_hostname
+      changed_when: false
+
+    - name: 지정한 호스트인지 확인
+      ansible.builtin.assert:
+        that:
+          - target_hostname.stdout == expected_hostname
+        fail_msg: "대상 호스트가 지정한 이름과 다릅니다."
+
+    - name: VM 저장소 마운트 확인
+      ansible.builtin.command:
+        argv:
+          - findmnt
+          - -n
+          - -o
+          - SOURCE
+          - --mountpoint
+          - /var/lib/libvirt
+      register: vm_mount
+      changed_when: false
+
+    - name: 확인된 VM 저장소인지 확인
+      ansible.builtin.assert:
+        that:
+          - vm_mount.stdout == "/dev/nvme0n1p5"
+        fail_msg: "VM 저장소가 예상한 위치에 마운트되지 않았습니다."
+
+    - name: 기본 이미지 파일 확인
+      ansible.builtin.stat:
+        path: "{{ base_image }}"
+        checksum_algorithm: sha256
+      register: base_image_status
+
+    - name: 검증된 기본 이미지인지 확인
+      ansible.builtin.assert:
+        that:
+          - base_image_status.stat.exists | default(false)
+          - base_image_status.stat.checksum | default("") == "04e8f2461a16a44e78a370284471f29616cdd9baf1893df25807b71f985b6c94"
+        fail_msg: "기본 이미지가 없거나 확인한 SHA-256과 다릅니다."
+
+    - name: 기존 VM 목록 확인
+      ansible.builtin.command:
+        argv:
+          - virsh
+          - -c
+          - qemu:///system
+          - list
+          - --all
+          - --name
+      register: existing_vms
+      changed_when: false
+
+    - name: VM 디스크 존재 여부 확인
+      ansible.builtin.stat:
+        path: "{{ vm_disk_path }}"
+      register: existing_vm_disk
+
+    - name: 기존 seed 이미지 확인
+      ansible.builtin.stat:
+        path: "{{ vm_seed_path }}"
+      register: existing_vm_seed
+
+    - name: 기존 cloud-init 작업 폴더 확인
+      ansible.builtin.stat:
+        path: "{{ vm_work_dir }}"
+      register: existing_vm_work_dir
+
+    - name: 기존 VM과 디스크 덮어쓰기 방지
+      ansible.builtin.assert:
+        that:
+          - vm_name not in existing_vms.stdout_lines
+          - not existing_vm_disk.stat.exists
+          - not existing_vm_seed.stat.exists
+          - not existing_vm_work_dir.stat.exists
+        fail_msg: "같은 이름의 VM 또는 디스크가 이미 있습니다."
+
+    - name: br-vm 존재 확인
+      ansible.builtin.command:
+        argv:
+          - ip
+          - link
+          - show
+          - dev
+          - "{{ vm_bridge }}"
+      changed_when: false
+
+    - name: cloud-init 작업 폴더 생성
+      ansible.builtin.file:
+        path: "{{ vm_work_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: cloud-init 사용자 설정 생성
+      ansible.builtin.template:
+        src: templates/user-data.yml.j2
+        dest: "{{ vm_work_dir }}/user-data.yml"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: cloud-init 네트워크 설정 생성
+      ansible.builtin.template:
+        src: templates/network-config.yml.j2
+        dest: "{{ vm_work_dir }}/network-config.yml"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: cloud-init 식별 정보 생성
+      ansible.builtin.template:
+        src: templates/meta-data.yml.j2
+        dest: "{{ vm_work_dir }}/meta-data.yml"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: cloud-init seed 이미지 생성
+      ansible.builtin.command:
+        argv:
+          - cloud-localds
+          - "--network-config={{ vm_work_dir }}/network-config.yml"
+          - "{{ vm_seed_path }}"
+          - "{{ vm_work_dir }}/user-data.yml"
+          - "{{ vm_work_dir }}/meta-data.yml"
+        creates: "{{ vm_seed_path }}"
+
+    - name: cloud-init seed 이미지 권한 설정
+      ansible.builtin.file:
+        path: "{{ vm_seed_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: VM 전용 qcow2 오버레이 디스크 생성
+      ansible.builtin.command:
+        argv:
+          - qemu-img
+          - create
+          - -f
+          - qcow2
+          - -F
+          - qcow2
+          - -b
+          - "{{ base_image }}"
+          - "{{ vm_disk_path }}"
+          - "{{ vm_disk_gib }}G"
+        creates: "{{ vm_disk_path }}"
+
+    - name: VM 생성 및 부팅
+      ansible.builtin.command:
+        argv:
+          - virt-install
+          - --connect
+          - qemu:///system
+          - --name
+          - "{{ vm_name }}"
+          - --memory
+          - "{{ vm_memory_mib | string }}"
+          - --vcpus
+          - "{{ vm_vcpus | string }}"
+          - --os-variant
+          - generic
+          - --import
+          - --disk
+          - "path={{ vm_disk_path }},format=qcow2,bus=virtio"
+          - --disk
+          - "path={{ vm_seed_path }},device=cdrom"
+          - --network
+          - "bridge={{ vm_bridge }},model=virtio,mac={{ vm_mac }}"
+          - --graphics
+          - none
+          - --noautoconsole
+
+    - name: VM 자동 시작 설정
+      ansible.builtin.command:
+        argv:
+          - virsh
+          - -c
+          - qemu:///system
+          - autostart
+          - "{{ vm_name }}"
+      changed_when: true

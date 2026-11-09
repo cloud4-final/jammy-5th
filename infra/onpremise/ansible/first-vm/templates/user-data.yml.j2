@@ -1,0 +1,14 @@
+#cloud-config
+
+hostname: {{ vm_name }}
+manage_etc_hosts: true
+
+users:
+  - name: {{ vm_user }}
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    ssh_authorized_keys:
+      - {{ vm_ssh_public_key | to_json }}
+
+ssh_pwauth: false
