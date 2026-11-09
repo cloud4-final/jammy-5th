@@ -26,7 +26,7 @@ labels: ["infra"]
 ## 체크리스트
 
 - [ ] AWS 리소스는 Terraform으로만 만들었다
-- [ ] AWS 리소스에 `project`, `owner` 태그를 붙였다
+- [ ] AWS 리소스에 `Project`, `Owner` 태그를 붙였다
 - [ ] 키, 비밀번호, tfstate를 커밋하지 않았다
 
 ## 관련 자료
