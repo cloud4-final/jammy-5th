@@ -8,7 +8,7 @@ locals {
 resource "aws_s3_bucket" "this" {
   for_each = local.s3_buckets
   bucket   = each.value
-  tags     = { Component = each.key }
+  tags     = { Name = each.value, Component = each.key }
 }
 
 resource "aws_s3_bucket_public_access_block" "this" {
