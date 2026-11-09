@@ -2,7 +2,7 @@
 resource "aws_iam_user" "pgbackrest" {
   name = "jammy-pgbackrest"
   path = "/service/"
-  tags = { Component = "backup" }
+  tags = { Name = "jammy-pgbackrest", Component = "backup" }
 }
 
 data "aws_iam_policy_document" "pgbackrest" {
@@ -13,7 +13,7 @@ data "aws_iam_policy_document" "pgbackrest" {
     condition {
       test     = "StringLike"
       variable = "s3:prefix"
-      values   = ["pgbackrest", "pgbackrest/*"] # 목록도 이 경로만
+      values   = ["pgbackrest/*"] # 목록도 이 경로만
     }
   }
   statement {
