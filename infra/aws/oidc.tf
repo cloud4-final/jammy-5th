@@ -21,7 +21,7 @@ data "aws_iam_policy_document" "gha_plan_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:cloud4-final@348168592/hybrid-5th@1434057848:pull_request"]
+      values   = ["repo:cloud4-final@348168592/jammy-5th@1434057848:pull_request"]
     }
   }
 }
