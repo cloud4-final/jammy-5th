@@ -1,0 +1,47 @@
+name: terraform-plan
+
+on:
+  pull_request:
+    paths:
+      - "infra/aws/**"
+      - ".github/workflows/terraform-plan.yml"
+
+permissions:
+  id-token: write   # OIDC 출입증 발급
+  contents: read
+
+concurrency:
+  group: tf-plan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/aws
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.17.0"
+          terraform_wrapper: false
+
+      - run: terraform init -input=false
+
+      - name: plan
+        run: |
+          terraform plan -input=false -no-color -out=tfplan
+          {
+            echo '### terraform plan'
+            echo '```'
+            terraform show -no-color tfplan | grep -E '^  # |Plan:|No changes|Changes to Outputs' || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
