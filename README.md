@@ -1,4 +1,4 @@
-# hybrid-5th
+# jammy-5th
 
 3거점 온프레미스(OpenStack + k3s)와 AWS를 잇는 하이브리드 클라우드 프로젝트
 
