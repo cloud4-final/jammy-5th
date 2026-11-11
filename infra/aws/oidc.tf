@@ -52,3 +52,19 @@ resource "aws_iam_role_policy" "gha_plan_lock" {
     }]
   })
 }
+
+# PR plan 역할은 백업 객체 내용을 읽지 못하게 함 (버킷 설정·목록은 plan에 필요해 유지)
+resource "aws_iam_role_policy" "gha_plan_deny_backup_read" {
+  name = "deny-backup-object-read"
+  role = aws_iam_role.gha_plan.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "DenyBackupObjectRead"
+      Effect   = "Deny"
+      Action   = ["s3:GetObject*"]
+      Resource = "${aws_s3_bucket.this["backup"].arn}/*"
+    }]
+  })
+}
