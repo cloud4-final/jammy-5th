@@ -1,10 +1,11 @@
-# 우분투 24.04 최신 이미지
-data "aws_ami" "ubuntu" {
-  most_recent = true
-  owners      = ["099720109477"] # Canonical (우분투 공식 계정)
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
+# 입구 이미지: 의도적으로 갱신할 때만 PR로 바꾼다 (우분투 24.04, Canonical)
+variable "edge_ami_id" {
+  type    = string
+  default = "ami-05b2d28c4a1614552"
+
+  validation {
+    condition     = can(regex("^ami-[0-9a-f]+$", var.edge_ami_id))
+    error_message = "edge_ami_id는 ami-로 시작해야 합니다."
   }
 }
 
@@ -16,7 +17,7 @@ locals {
 resource "aws_instance" "edge" {
   for_each = local.edges # 목록 개수만큼 찍어 냄
 
-  ami                    = data.aws_ami.ubuntu.id
+  ami                    = var.edge_ami_id
   instance_type          = "t3.micro"
   subnet_id              = aws_subnet.public[each.key].id # a는 서브넷 a, c는 서브넷 c
   vpc_security_group_ids = [aws_security_group.edge.id]
