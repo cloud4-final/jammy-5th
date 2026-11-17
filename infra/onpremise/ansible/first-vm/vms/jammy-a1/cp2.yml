@@ -1,0 +1,9 @@
+vm_name: cp2
+vm_vcpus: 2
+vm_memory_mib: 4096
+vm_disk_gib: 30
+
+vm_bridge: br-svc
+vm_ip_cidr: 10.11.20.1/24
+vm_gateway: 10.11.20.254
+vm_mac: "52:54:00:0b:14:01"
