@@ -7,7 +7,7 @@ vm_storage_device: /dev/nvme0n1p5
 base_image: /var/lib/libvirt/images/noble-server-cloudimg-amd64.img
 # 본체에서 `sudo sha256sum /var/lib/libvirt/images/noble-server-cloudimg-amd64.img` 값으로 바꾼다.
 # 바꾸기 전에는 이미지 확인 단계에서 멈춘다.
-base_image_sha256: "CHANGE_ME"
+base_image_sha256: "04e8f2461a16a44e78a370284471f29616cdd9baf1893df25807b71f985b6c94"
 
 vm_disk_dir: /var/lib/libvirt/images
 vm_seed_dir: /var/lib/libvirt/cloud-init

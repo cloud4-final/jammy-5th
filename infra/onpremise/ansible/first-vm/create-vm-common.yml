@@ -151,6 +151,7 @@
     - name: 추가 디스크 확인
       ansible.builtin.stat:
         path: "{{ item }}"
+        follow: true
       loop: "{{ vm_extra_disks }}"
       register: extra_disk_status
 
