@@ -4,8 +4,8 @@
   become: true
   gather_facts: false
 
-  vars_files:
-    - vm-vars.yml
+  # 호스트 공통 값은 host_vars/<호스트>.yml, VM별 값은 vms/<호스트>/<vm>.yml(-e @)로 넣는다.
+  # vm-vars.yml은 변수 설명용 예시라서 읽지 않는다.
 
   vars:
     vm_disk_path: "{{ vm_disk_dir }}/{{ vm_name }}.qcow2"
@@ -18,17 +18,44 @@
     # 실수로 VM이 생성되지 않도록 기본값을 false로 둔다.
     confirm_vm_create: false
 
+    # 추가 디스크(LV 등)는 없으면 빈 목록
+    vm_extra_disks: []
+
+    vm_virt_install_argv:
+      - virt-install
+      - --connect
+      - qemu:///system
+      - --name
+      - "{{ vm_name }}"
+      - --memory
+      - "{{ vm_memory_mib | string }}"
+      - --vcpus
+      - "{{ vm_vcpus | string }}"
+      - --os-variant
+      - generic
+      - --import
+      - --disk
+      - "path={{ vm_disk_path }},format=qcow2,bus=virtio"
+      - --disk
+      - "path={{ vm_seed_path }},device=cdrom"
+      - --network
+      - "bridge={{ vm_bridge }},model=virtio,mac={{ vm_mac }}"
+      - --graphics
+      - none
+      - --noautoconsole
+
   tasks:
     - name: 생성 실행 여부 확인
       ansible.builtin.assert:
         that:
-          - confirm_vm_create | bool
+          - (confirm_vm_create | bool) or ansible_check_mode
           - ansible_play_hosts_all | length == 1
         fail_msg: >-
           VM 생성이 잠겨 있습니다.
           네트워크와 코드를 검토한 뒤 생성 시점에만 잠금을 해제하세요.
 
     - name: 대상 호스트 이름 확인
+      check_mode: false
       ansible.builtin.command:
         argv:
           - hostname
@@ -42,6 +69,7 @@
         fail_msg: "대상 호스트가 지정한 이름과 다릅니다."
 
     - name: VM 저장소 마운트 확인
+      check_mode: false
       ansible.builtin.command:
         argv:
           - findmnt
@@ -56,7 +84,7 @@
     - name: 확인된 VM 저장소인지 확인
       ansible.builtin.assert:
         that:
-          - vm_mount.stdout == "/dev/nvme0n1p5"
+          - vm_mount.stdout == vm_storage_device
         fail_msg: "VM 저장소가 예상한 위치에 마운트되지 않았습니다."
 
     - name: 기본 이미지 파일 확인
@@ -69,10 +97,11 @@
       ansible.builtin.assert:
         that:
           - base_image_status.stat.exists | default(false)
-          - base_image_status.stat.checksum | default("") == "04e8f2461a16a44e78a370284471f29616cdd9baf1893df25807b71f985b6c94"
+          - base_image_status.stat.checksum | default("") == base_image_sha256
         fail_msg: "기본 이미지가 없거나 확인한 SHA-256과 다릅니다."
 
     - name: 기존 VM 목록 확인
+      check_mode: false
       ansible.builtin.command:
         argv:
           - virsh
@@ -108,7 +137,8 @@
           - not existing_vm_work_dir.stat.exists
         fail_msg: "같은 이름의 VM 또는 디스크가 이미 있습니다."
 
-    - name: br-vm 존재 확인
+    - name: VM 브리지 존재 확인
+      check_mode: false
       ansible.builtin.command:
         argv:
           - ip
@@ -117,6 +147,44 @@
           - dev
           - "{{ vm_bridge }}"
       changed_when: false
+
+    - name: 추가 디스크 확인
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: "{{ vm_extra_disks }}"
+      register: extra_disk_status
+
+    - name: 추가 디스크가 블록 장치인지 확인
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists | default(false)
+          - item.stat.isblk | default(false)
+        fail_msg: "추가 디스크 {{ item.item }}가 없거나 블록 장치가 아닙니다."
+      loop: "{{ extra_disk_status.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: 추가 디스크를 다른 VM이 쓰고 있지 않은지 확인
+      check_mode: false
+      ansible.builtin.shell: |
+        set -o pipefail
+        for d in $(virsh -c qemu:///system list --all --name); do
+          virsh -c qemu:///system domblklist "$d" --details | awk '{print $4}'
+        done | grep -Fx -- "{{ item }}" || true
+      args:
+        executable: /bin/bash
+      loop: "{{ vm_extra_disks }}"
+      register: extra_disk_in_use
+      changed_when: false
+
+    - name: 추가 디스크 중복 사용 방지
+      ansible.builtin.assert:
+        that:
+          - item.stdout | length == 0
+        fail_msg: "{{ item.item }}를 이미 다른 VM이 쓰고 있습니다."
+      loop: "{{ extra_disk_in_use.results }}"
+      loop_control:
+        label: "{{ item.item }}"
 
     - name: cloud-init 작업 폴더 생성
       ansible.builtin.file:
@@ -182,30 +250,14 @@
           - "{{ vm_disk_gib }}G"
         creates: "{{ vm_disk_path }}"
 
+    - name: 추가 디스크 인자 만들기
+      ansible.builtin.set_fact:
+        vm_extra_disk_argv: "{{ (vm_extra_disk_argv | default([])) + ['--disk', 'path=' ~ item ~ ',format=raw,bus=virtio,cache=none'] }}"
+      loop: "{{ vm_extra_disks }}"
+
     - name: VM 생성 및 부팅
       ansible.builtin.command:
-        argv:
-          - virt-install
-          - --connect
-          - qemu:///system
-          - --name
-          - "{{ vm_name }}"
-          - --memory
-          - "{{ vm_memory_mib | string }}"
-          - --vcpus
-          - "{{ vm_vcpus | string }}"
-          - --os-variant
-          - generic
-          - --import
-          - --disk
-          - "path={{ vm_disk_path }},format=qcow2,bus=virtio"
-          - --disk
-          - "path={{ vm_seed_path }},device=cdrom"
-          - --network
-          - "bridge={{ vm_bridge }},model=virtio,mac={{ vm_mac }}"
-          - --graphics
-          - none
-          - --noautoconsole
+        argv: "{{ vm_virt_install_argv + (vm_extra_disk_argv | default([])) }}"
 
     - name: VM 자동 시작 설정
       ansible.builtin.command:
