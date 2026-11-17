@@ -1,4 +1,4 @@
-vm_name: collect1
+vm_name: app-collect1
 vm_vcpus: 4
 vm_memory_mib: 8192
 vm_disk_gib: 20

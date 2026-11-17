@@ -1,4 +1,4 @@
-vm_name: ops1
+vm_name: app-ops1
 vm_vcpus: 2
 vm_memory_mib: 6144
 vm_disk_gib: 20
