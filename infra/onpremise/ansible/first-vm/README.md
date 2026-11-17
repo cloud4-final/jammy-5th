@@ -1,48 +1,39 @@
 # 온프레미스 VM 생성 코드
 
-KVM·libvirt 환경에서 Ubuntu cloud image와 cloud-init을 사용해
-VM을 생성하기 위한 Ansible 공통 플레이북입니다.
+KVM·libvirt 기기에서 Ubuntu cloud image와 cloud-init으로 VM을 만드는 Ansible 플레이북입니다.
+2026-11-17 거점 A 기기 3대(jammy-main, jammy-a1, jammy-a2)에 VM 11대를 이 코드로 만들었습니다.
 
 ## 파일 구성
 
-- `create-vm-common.yml`: VM 생성 공통 플레이북 (한 번에 VM 1대)
-- `host_vars/<호스트>.yml`: 호스트 공통 값 (호스트 이름, 저장 장치, 이미지와 SHA-256)
-- `vms/<호스트>/<vm>.yml`: VM별 값 (이름, 사양, 브리지, 주소, MAC, 추가 디스크)
-- `inventory.example.ini`: 인벤토리 예시. `inventory.ini`로 복사해서 사용 (Git 제외)
-- `vm-vars.yml`: 변수 설명용 예시 (플레이북이 읽지 않음)
-- `templates/`: cloud-init 설정 템플릿
+- create-vm-common.yml: VM 1대를 만드는 플레이북
+- host_vars/<기기>.yml: 기기별 값 (기기 이름, 저장 장치, 이미지 경로와 SHA-256, 폴더, VM 계정, DNS). 자동으로 읽습니다.
+- vms/<기기>/<vm>.yml: VM별 값 (이름, CPU, 메모리, 디스크, 브리지, IP, 게이트웨이, MAC, 추가 디스크). 실행할 때 지정합니다.
+- vm-vars.yml: 변수 설명용 예시 (플레이북은 읽지 않음)
+- templates/: cloud-init 설정 틀 (user-data, network-config, meta-data)
+- inventory.example.ini: 인벤토리 예시. 실제 inventory.ini는 Git에 올리지 않습니다.
 
-## 거점 A 본체 VM (구축 가이드 0단계 표 기준)
+## 실행
 
-| VM | 주소 | 브리지 | 추가 디스크 |
-|---|---|---|---|
-| cp1 | 10.11.10.1 | br-svc | - |
-| collect1 (수집) | 10.11.10.2 | br-svc | /dev/vg-fast/raw |
-| ops1 (관제) | 10.11.10.3 | br-svc | - |
-| js1 (JetStream) | 10.11.10.4 | br-svc | /dev/vg-fast/js |
-| db1 (주 DB) | 10.11.11.1 | br-data | /dev/vg-fast/pg-data |
+1. inventory.example.ini를 inventory.ini로 복사하고 기기 주소를 넣습니다.
+2. 미리 보기: ansible-playbook -i inventory.ini create-vm-common.yml -K -l jammy-main -e @vms/jammy-main/cp1.yml --check
+3. 생성: 같은 명령에서 --check 대신 -e confirm_vm_create=true 를 붙입니다.
 
-게이트웨이는 호스트 브리지 주소(.254)입니다. MAC은 `52:54:00` 뒤에 IP 2~4번째 칸을 16진수로 붙였습니다.
-vCPU·메모리는 본체 사양을 확인한 뒤 조정합니다.
+## 안전장치
 
-## 실행 (WSL에서)
+- confirm_vm_create=true 없이는 만들지 않고, 한 번에 기기 한 대에만 실행합니다.
+- 기기 이름, VM 저장소 파티션, 기본 이미지 SHA-256을 확인합니다.
+- 같은 이름의 VM, 디스크, seed, 작업 폴더가 있으면 멈춥니다.
+- 추가 디스크는 블록 장치인지, 다른 VM이 쓰고 있는지 확인한 뒤 연결합니다.
+- WSL의 공개 키만 읽고 개인 키는 읽지 않습니다.
 
-```
-cp inventory.example.ini inventory.ini   # 본체 주소 입력
-# host_vars/jammy-main.yml 의 base_image_sha256 입력
+## VM 추가
 
-ansible-playbook -i inventory.ini create-vm-common.yml -K \
-  -e @vms/jammy-main/cp1.yml --check
-ansible-playbook -i inventory.ini create-vm-common.yml -K \
-  -e @vms/jammy-main/cp1.yml -e confirm_vm_create=true
-```
-
-- `-K`: 본체 sudo 비밀번호
-- VM에는 WSL의 `~/.ssh/id_ed25519.pub`가 들어갑니다.
-- VM 접속: `ssh -J jammy@<본체 주소> jammy@10.11.10.1`
+vms/<기기>/ 의 파일 하나를 복사해 이름, IP, MAC, 사양을 바꿉니다.
+MAC은 52:54:00 뒤에 IP 끝 세 자리를 16진수로 붙입니다. (예: 10.11.11.1 → 52:54:00:0b:0b:01)
+추가 디스크는 기기의 vg-fast에 LV를 먼저 만든 뒤 vm_extra_disks에 경로를 적습니다.
 
 ## 검증 범위
 
-- 기존 VM 구축에 사용한 코드를 정리했습니다.
-- 새 환경에서 전체 재구축 시험은 아직 하지 않았습니다.
-- 수신 VM의 VLAN 브리지(br-v10·br-v20) 연결은 스위치 작업 뒤에 추가합니다.
+- 거점 A 기기 3대에 VM 11대 생성, 기기 재부팅 후 VM 자동 시작, VM 인터넷 접속, 추가 디스크 연결을 확인했습니다.
+- cloud-init 설정에서 VM 사용자에게 비밀번호 없는 sudo 권한을 줍니다. 팀 정책과 맞는지 확인이 필요합니다.
+- 수신 VM의 공유기 쪽 망(VLAN 10·20) NIC는 아직 지원하지 않습니다.
