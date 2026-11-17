@@ -1,5 +1,17 @@
-expected_hostname: example-host
+# 변수 설명용 예시. 플레이북은 이 파일을 읽지 않는다.
+# 실제 값: host_vars/<호스트>.yml (호스트 공통), vms/<호스트>/<vm>.yml (VM별)
 
+# --- 호스트 공통 (host_vars) ---
+expected_hostname: example-host
+vm_storage_device: /dev/nvme0n1p5
+base_image: /var/lib/libvirt/images/noble-server-cloudimg-amd64.img
+base_image_sha256: "<sha256sum 결과>"
+vm_disk_dir: /var/lib/libvirt/images
+vm_seed_dir: /var/lib/libvirt/cloud-init
+vm_user: jammy
+vm_dns: 192.0.2.53
+
+# --- VM별 (vms/) ---
 vm_name: example-vm
 vm_vcpus: 2
 vm_memory_mib: 4096
@@ -8,11 +20,7 @@ vm_disk_gib: 20
 vm_bridge: example-bridge
 vm_ip_cidr: 192.0.2.10/24
 vm_gateway: 192.0.2.1
-vm_dns: 192.0.2.53
 vm_mac: "52:54:00:aa:bb:cc"
 
-vm_user: ubuntu
-
-base_image: /var/lib/libvirt/base-images/ubuntu-24.04-server-cloudimg-amd64.img
-vm_disk_dir: /var/lib/libvirt/images
-vm_seed_dir: /var/lib/libvirt/cloud-init
+# 선택: VM에 그대로 붙일 블록 장치 (LV 등). vdb, vdc 순서로 붙는다.
+vm_extra_disks: []
