@@ -70,4 +70,5 @@ resource "aws_ssm_parameter" "haproxy_cfg" {
   type  = "String"                                 # 비밀 아님 → 암호화 불필요
   tier  = "Standard"                               # 무료, 최대 4KB
   value = file("${path.module}/files/haproxy.cfg") # 레포 파일 내용을 그대로 올림
+  tags  = { Name = "jammy-edge-haproxy-cfg", Component = "edge" } # C-AWS-001
 }
