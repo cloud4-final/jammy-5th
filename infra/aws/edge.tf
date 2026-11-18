@@ -17,6 +17,9 @@ locals {
 resource "aws_instance" "edge" {
   for_each = local.edges # 목록 개수만큼 찍어 냄
 
+  # 첫 부팅 때 SSM 읽기 권한이 먼저 있어야 함 (IAM 반영 지연은 별도 한계)
+  depends_on = [aws_iam_role_policy.edge_ssm_minimal]
+
   ami                    = var.edge_ami_id
   instance_type          = "t3.micro"
   subnet_id              = aws_subnet.public[each.key].id # a는 서브넷 a, c는 서브넷 c
