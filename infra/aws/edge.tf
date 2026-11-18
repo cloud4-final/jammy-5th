@@ -25,8 +25,9 @@ resource "aws_instance" "edge" {
 
   # 템플릿 빈칸 채우기
   user_data = templatefile("${path.module}/userdata/edge.sh.tftpl", {
-    hostname = "jammy-edge-${each.key}"
-    ts_param = "/jammy/tailscale/edge-authkey-${each.key}"
+    hostname  = "jammy-edge-${each.key}"
+    ts_param  = "/jammy/tailscale/edge-authkey-${each.key}"
+    cfg_param = aws_ssm_parameter.haproxy_cfg.name
   })
   user_data_replace_on_change = true
 
@@ -61,4 +62,12 @@ moved {
 moved {
   from = aws_eip.edge_a
   to   = aws_eip.edge["a"]
+}
+
+# HAProxy 설정 원본 → SSM 파라미터 (#43)
+resource "aws_ssm_parameter" "haproxy_cfg" {
+  name  = "/jammy/edge/haproxy-cfg"
+  type  = "String"                                 # 비밀 아님 → 암호화 불필요
+  tier  = "Standard"                               # 무료, 최대 4KB
+  value = file("${path.module}/files/haproxy.cfg") # 레포 파일 내용을 그대로 올림
 }

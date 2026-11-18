@@ -2,39 +2,31 @@
 set -euxo pipefail
 apt-get update
 apt-get install -y haproxy nginx
+snap install aws-cli --classic                 # 파라미터를 읽으려면 먼저 필요
 
 # 점검 페이지(nginx)는 8080, 80은 HAProxy가 사용
 sed -i 's/listen 80 default_server;/listen 8080 default_server;/; s/listen \[::\]:80 default_server;/listen [::]:8080 default_server;/' /etc/nginx/sites-available/default
 echo "jammy (${hostname}): 점검 중입니다 (all sites down)" > /var/www/html/index.html
 systemctl restart nginx
 
-cat >> /etc/haproxy/haproxy.cfg <<'CFG'
-
-frontend web
-    bind *:80
-    default_backend sites
-
-backend sites
-    balance roundrobin
-    option httpchk GET /
-    default-server inter 3s fall 3 rise 2      # 3초마다 확인, 3번 실패 DOWN, 2번 성공 UP
-    server a1 10.10.0.121:80 check             # 거점 A app-01
-    server a2 10.10.0.122:80 check             # 거점 A app-02
-    server b1 10.20.0.121:80 check             # 거점 B
-    server c1 10.30.0.121:80 check             # 거점 C
-    # server burst <AWS burst 주소>:80 check backup  # 2순위: AWS (나중에)
-    server local 127.0.0.1:8080 check backup   # 3순위: 점검 페이지
-
-listen stats
-    bind 127.0.0.1:8404                        # 서버 안에서만 보이는 상태 페이지
-    stats enable
-    stats uri /
-CFG
-systemctl restart haproxy
+# HAProxy 설정 적용 스크립트: 부팅 때와 Run Command 때 같이 사용 (#43)
+cat > /usr/local/bin/haproxy-apply <<'APPLY'
+#!/bin/bash
+set -euo pipefail
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+/snap/bin/aws ssm get-parameter --region ap-northeast-2 \
+  --name ${cfg_param} --query Parameter.Value --output text | cat > "$tmp"
+[ -s "$tmp" ] || { echo "빈 설정 수신, 중단" >&2; exit 1; }
+haproxy -c -f "$tmp"                           # 문법 검사 실패 시 종료, 기존 설정 유지
+install -m 644 "$tmp" /etc/haproxy/haproxy.cfg
+systemctl reload haproxy
+APPLY
+chmod +x /usr/local/bin/haproxy-apply
+/usr/local/bin/haproxy-apply
 
 # --- Tailscale ---
 curl -fsSL https://tailscale.com/install.sh | sh
-snap install aws-cli --classic
 
 set +x                                         # 키가 로그에 찍히지 않게
 TS_KEY=$(aws ssm get-parameter --region ap-northeast-2 \
