@@ -44,3 +44,4 @@ terraform.rc
 # planout
 *.plan
 failover_*.csv
+__pycache__/
