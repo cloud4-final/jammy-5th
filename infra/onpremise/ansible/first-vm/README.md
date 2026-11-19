@@ -14,8 +14,10 @@ KVM·libvirt 기기에서 Ubuntu cloud image와 cloud-init으로 VM을 만드는
 
 ## 실행
 
+0. WSL에 `~/.ssh/id_ed25519.pub`가 있어야 합니다. 없으면 `ssh-keygen -t ed25519`로 먼저 만듭니다. (없으면 생성 도중 멈추고, 이미 만든 작업 폴더 때문에 재실행도 멈춥니다.)
 1. inventory.example.ini를 inventory.ini로 복사하고 기기 주소를 넣습니다.
-2. 미리 보기: ansible-playbook -i inventory.ini create-vm-common.yml -K -l jammy-main -e @vms/jammy-main/cp1.yml --check
+2. 미리 보기: ansible-playbook -i inventory.ini create-vm-common.yml -K -l <기기> -e @vms/<기기>/<새 VM>.yml --check
+   - 이미 만든 VM의 파일로 실행하면 기존 VM 검사에서 멈춥니다. 새로 만들 VM 파일로 미리 봅니다.
 3. 생성: 같은 명령에서 --check 대신 -e confirm_vm_create=true 를 붙입니다.
 
 ## 안전장치
@@ -23,7 +25,8 @@ KVM·libvirt 기기에서 Ubuntu cloud image와 cloud-init으로 VM을 만드는
 - confirm_vm_create=true 없이는 만들지 않고, 한 번에 기기 한 대에만 실행합니다.
 - 기기 이름, VM 저장소 파티션, 기본 이미지 SHA-256을 확인합니다.
 - 같은 이름의 VM, 디스크, seed, 작업 폴더가 있으면 멈춥니다.
-- 추가 디스크는 블록 장치인지, 다른 VM이 쓰고 있는지 확인한 뒤 연결합니다.
+- 추가 디스크는 블록 장치인지, 다른 VM(실행 중·다음 부팅 설정 모두)이 같은 장치를 쓰고 있는지 장치 번호로 확인한 뒤 연결합니다.
+- vm_autostart: false인 VM(js2)은 자동 시작에서 제외합니다.
 - WSL의 공개 키만 읽고 개인 키는 읽지 않습니다.
 
 ## VM 추가
