@@ -1,0 +1,9 @@
+vm_name: app-ops1
+vm_vcpus: 2
+vm_memory_mib: 6144
+vm_disk_gib: 20
+
+vm_bridge: br-svc
+vm_ip_cidr: 10.11.10.3/24
+vm_gateway: 10.11.10.254
+vm_mac: "52:54:00:0b:0a:03"

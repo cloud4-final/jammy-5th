@@ -1,0 +1,15 @@
+vm_name: js2
+vm_vcpus: 2
+vm_memory_mib: 4096
+vm_disk_gib: 20
+
+vm_bridge: br-svc
+vm_ip_cidr: 10.11.20.4/24
+vm_gateway: 10.11.20.254
+vm_mac: "52:54:00:0b:14:04"
+
+vm_extra_disks:
+  - /dev/vg-fast/js
+
+# 설계상 중지 VM: 생성 시 cloud-init 첫 부팅만 하고 자동 시작하지 않는다.
+vm_autostart: false
