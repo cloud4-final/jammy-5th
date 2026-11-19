@@ -35,7 +35,7 @@
       - generic
       - --import
       - --disk
-      - "path={{ vm_disk_path }},format=qcow2,bus=virtio"
+      - "path={{ vm_disk_path }},format=qcow2,bus=virtio,cache=none,io=native"
       - --disk
       - "path={{ vm_seed_path }},device=cdrom"
       - --network
@@ -253,7 +253,7 @@
 
     - name: 추가 디스크 인자 만들기
       ansible.builtin.set_fact:
-        vm_extra_disk_argv: "{{ (vm_extra_disk_argv | default([])) + ['--disk', 'path=' ~ item ~ ',format=raw,bus=virtio,cache=none'] }}"
+        vm_extra_disk_argv: "{{ (vm_extra_disk_argv | default([])) + ['--disk', 'path=' ~ item ~ ',format=raw,bus=virtio,cache=none,io=native'] }}"
       loop: "{{ vm_extra_disks }}"
 
     - name: VM 생성 및 부팅
