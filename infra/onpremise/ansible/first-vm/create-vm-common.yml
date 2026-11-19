@@ -291,7 +291,9 @@
     # 설계상 중지 VM은 cloud-init이 끝나면 스스로 꺼진다(user-data의 power_state).
     # 꺼질 때까지 기다려 "생성 완료 = 중지 상태"를 확인한다.
     - name: 설계상 중지 VM이 첫 초기화 후 꺼졌는지 확인
-      when: not (vm_autostart | default(true) | bool)
+      when:
+        - not (vm_autostart | default(true) | bool)
+        - not ansible_check_mode
       ansible.builtin.command:
         argv:
           - virsh
