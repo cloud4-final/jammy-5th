@@ -12,3 +12,12 @@ users:
       - {{ vm_ssh_public_key | to_json }}
 
 ssh_pwauth: false
+{% if not (vm_autostart | default(true) | bool) %}
+
+# 설계상 중지 VM: cloud-init이 모두 끝난 뒤 전원을 끈다.
+power_state:
+  mode: poweroff
+  message: "cloud-init 완료, 설계상 중지 VM이라 종료합니다"
+  timeout: 30
+  condition: true
+{% endif %}

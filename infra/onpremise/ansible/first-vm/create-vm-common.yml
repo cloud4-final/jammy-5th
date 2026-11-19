@@ -173,9 +173,10 @@
         set -euo pipefail
         want=$(stat -L -c '%t:%T' -- "{{ item }}")
         doms=$(virsh -c qemu:///system list --all --name)
+        persistent=$(virsh -c qemu:///system list --all --persistent --name)
         for d in $doms; do
           virsh -c qemu:///system domblklist "$d" --details
-          if virsh -c qemu:///system dominfo "$d" | grep '^Persistent: *yes' >/dev/null; then
+          if grep -Fxq -- "$d" <<< "$persistent"; then
             virsh -c qemu:///system domblklist "$d" --details --inactive
           fi
         done | awk '$4 ~ /^\// {print $4}' | sort -u | while read -r src; do
@@ -185,6 +186,8 @@
         done
       args:
         executable: /bin/bash
+      environment:
+        LC_ALL: C
       loop: "{{ vm_extra_disks }}"
       register: extra_disk_in_use
       changed_when: false
@@ -284,3 +287,22 @@
           - autostart
           - "{{ vm_name }}"
       changed_when: true
+
+    # 설계상 중지 VM은 cloud-init이 끝나면 스스로 꺼진다(user-data의 power_state).
+    # 꺼질 때까지 기다려 "생성 완료 = 중지 상태"를 확인한다.
+    - name: 설계상 중지 VM이 첫 초기화 후 꺼졌는지 확인
+      when: not (vm_autostart | default(true) | bool)
+      ansible.builtin.command:
+        argv:
+          - virsh
+          - -c
+          - qemu:///system
+          - domstate
+          - "{{ vm_name }}"
+      environment:
+        LC_ALL: C
+      register: vm_state
+      until: vm_state.stdout | trim == "shut off"
+      retries: 60
+      delay: 10
+      changed_when: false

@@ -26,7 +26,7 @@ KVM·libvirt 기기에서 Ubuntu cloud image와 cloud-init으로 VM을 만드는
 - 기기 이름, VM 저장소 파티션, 기본 이미지 SHA-256을 확인합니다.
 - 같은 이름의 VM, 디스크, seed, 작업 폴더가 있으면 멈춥니다.
 - 추가 디스크는 블록 장치인지, 다른 VM(실행 중·다음 부팅 설정 모두)이 같은 장치를 쓰고 있는지 장치 번호로 확인한 뒤 연결합니다.
-- vm_autostart: false인 VM(js2)은 자동 시작에서 제외합니다.
+- vm_autostart: false인 VM(js2)은 cloud-init 첫 초기화가 끝나면 스스로 꺼지고, 자동 시작에서도 제외합니다.
 - WSL의 공개 키만 읽고 개인 키는 읽지 않습니다.
 
 ## VM 추가
