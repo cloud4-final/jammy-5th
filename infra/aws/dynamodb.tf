@@ -42,8 +42,12 @@ resource "aws_iam_role_policy" "lease_operator" {
     Version = "2012-10-17"
     Statement = [{
       Effect   = "Allow"
-      Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"]
+      Action   = ["dynamodb:GetItem", "dynamodb:UpdateItem"] # PutItem 제거: 통째 덮어쓰기 차단
       Resource = aws_dynamodb_table.lease.arn
+      Condition = {
+        # db-primary 키만 읽기·쓰기
+        "ForAllValues:StringEquals" = { "dynamodb:LeadingKeys" = ["db-primary"] }
+      }
     }]
   })
 }
