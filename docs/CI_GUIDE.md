@@ -18,4 +18,4 @@ bash -n scripts/*.sh && shellcheck scripts/*.sh
 
 ## 4. 운영 안내
 현재 PR 필수 상태 체크(Required Check) 및 브랜치 보호 승인 규칙은 아직 설정되지 않았으며, 팀 합의 후 적용 예정입니다.
-백엔드·모니터링 CI는 각 repo([jammy-collector](https://github.com/cloud4-final/jammy-collector), [jammy-observability](https://github.com/cloud4-final/jammy-observability))에서 별도 관리합니다.
+백엔드·모니터링 CI는 각 repo([jammy-application](https://github.com/cloud4-final/jammy-application), [jammy-observability](https://github.com/cloud4-final/jammy-observability))에서 별도 관리합니다.
