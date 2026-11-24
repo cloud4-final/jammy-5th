@@ -8,7 +8,7 @@
 | infra/aws | AWS 리소스 Terraform (입구, Route 53, S3·CloudFront, burst) |
 | infra/openstack | 거점 OpenStack·VM 구성 |
 | k8s | 쿠버네티스 매니페스트 |
-| [jammy-collector](https://github.com/cloud4-final/jammy-collector) | 조회·수집 API (별도 저장소) |
+| [jammy-application](https://github.com/cloud4-final/jammy-application) | 조회·수집 API (별도 저장소) |
 | [jammy-observability](https://github.com/cloud4-final/jammy-observability) | Prometheus·Grafana·Loki·Alertmanager (별도 저장소) |
 | loadtest | k6 시나리오, 이벤트 생성기 |
 | docs/adr | 설계 결정 기록 |
