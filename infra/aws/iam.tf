@@ -70,3 +70,67 @@ resource "aws_iam_role_policy" "edge_ssm_minimal" {
     ]
   })
 }
+
+# 허브 역할 (#52)
+resource "aws_iam_role" "hub" {
+  name               = "jammy-hub-role"
+  assume_role_policy = data.aws_iam_policy_document.ec2_assume.json
+  tags               = { Component = "hub" }
+}
+
+resource "aws_iam_instance_profile" "hub" {
+  name = "jammy-hub-profile"
+  role = aws_iam_role.hub.name
+}
+
+resource "aws_iam_role_policy" "hub" {
+  name = "hub-minimal"
+  role = aws_iam_role.hub.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "AgentRegister"
+        Effect   = "Allow"
+        Action   = ["ssm:UpdateInstanceInformation"]
+        Resource = "*"
+      },
+      {
+        Sid    = "SessionManager"
+        Effect = "Allow"
+        Action = [
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "RunCommand"
+        Effect = "Allow"
+        Action = [
+          "ec2messages:AcknowledgeMessage",
+          "ec2messages:DeleteMessage",
+          "ec2messages:FailMessage",
+          "ec2messages:GetEndpoint",
+          "ec2messages:GetMessages",
+          "ec2messages:SendReply",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid      = "ReadHubParams" # 키·피어 목록 읽기
+        Effect   = "Allow"
+        Action   = "ssm:GetParameter"
+        Resource = "arn:aws:ssm:ap-northeast-2:${data.aws_caller_identity.current.account_id}:parameter/jammy/hub/*"
+      },
+      {
+        Sid      = "SaveOwnKey" # 첫 부팅 때 만든 키 저장 (이 파라미터 하나만)
+        Effect   = "Allow"
+        Action   = "ssm:PutParameter"
+        Resource = aws_ssm_parameter.hub_private_key.arn
+      },
+    ]
+  })
+}

@@ -13,3 +13,7 @@ output "edge_public_ips" {
 output "gha_plan_role_arn" {
   value = aws_iam_role.gha_plan.arn
 }
+
+output "hub_public_ip" {
+  value = aws_eip.hub.public_ip # 거점 설정의 Endpoint (UDP 51830)
+}
