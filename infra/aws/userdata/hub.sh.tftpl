@@ -65,6 +65,9 @@ if systemctl is-active --quiet wg-quick@wg2; then
 else
   systemctl enable --now wg-quick@wg2        # 재부팅 시 자동 시작
 fi
+# syncconf는 라우트를 만들지 않음 → 피어 대역마다 wg2 라우트 보장
+wg show wg2 allowed-ips | awk '{for(i=2;i<=NF;i++) print $i}' | \
+  while read -r net; do ip route replace "$net" dev wg2; done
 APPLY
 chmod +x /usr/local/bin/wg-apply
 /usr/local/bin/wg-apply
