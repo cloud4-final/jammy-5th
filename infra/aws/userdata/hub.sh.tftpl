@@ -55,6 +55,7 @@ trap 'rm -f "$tmp"' EXIT
   echo "[Interface]"
   echo "Address = 10.100.12.254/24"
   echo "ListenPort = 51830"
+  echo "MTU = 1420"                           # 거점과 맞춤 (EC2 9001 기준 자동값 방지, #55)
   echo "PrivateKey = $(cat /etc/wireguard/wg2.key)"
   echo "PostUp = /usr/local/bin/hub-fw"
   echo
