@@ -1,0 +1,73 @@
+#!/bin/bash
+set -euxo pipefail
+hostnamectl set-hostname ${hostname}
+apt-get update
+apt-get install -y wireguard-tools
+snap install aws-cli --classic
+
+# 중계 켜기 (재부팅 후에도 유지)
+echo "net.ipv4.ip_forward = 1" > /etc/sysctl.d/99-wg-hub.conf
+sysctl --system
+
+# 방화벽: 거점 간 5432·7422(+ping)만 중계, 나머지 차단. wg2가 켜질 때마다 실행
+cat > /usr/local/bin/hub-fw <<'FW'
+#!/bin/bash
+set -euo pipefail
+iptables -N HUB_FWD 2>/dev/null || iptables -F HUB_FWD
+iptables -C FORWARD -j HUB_FWD 2>/dev/null || iptables -I FORWARD -j HUB_FWD
+iptables -A HUB_FWD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A HUB_FWD -i wg2 -o wg2 -p tcp --dport 5432 -j ACCEPT
+iptables -A HUB_FWD -i wg2 -o wg2 -p tcp --dport 7422 -j ACCEPT
+iptables -A HUB_FWD -i wg2 -o wg2 -p icmp -j ACCEPT
+iptables -A HUB_FWD -j DROP
+FW
+chmod +x /usr/local/bin/hub-fw
+
+# 개인키: SSM 값이 placeholder면 여기서 만들어 저장, 아니면 저장된 키 사용
+install -d -m 700 /etc/wireguard
+set +x
+umask 077
+KEY=$(/snap/bin/aws ssm get-parameter --region ap-northeast-2 \
+  --name ${key_param} --with-decryption --query Parameter.Value --output text)
+if [ "$KEY" = "placeholder" ]; then
+  wg genkey | tr -d '\n' > /etc/wireguard/wg2.key
+  /snap/bin/aws ssm put-parameter --region ap-northeast-2 \
+    --name ${key_param} --type SecureString --overwrite \
+    --value "file:///etc/wireguard/wg2.key"
+else
+  printf '%s' "$KEY" > /etc/wireguard/wg2.key
+fi
+unset KEY
+umask 022
+set -x
+
+# 설정 적용 스크립트: 부팅 때와 Run Command(피어 추가) 때 같이 사용
+cat > /usr/local/bin/wg-apply <<'APPLY'
+#!/bin/bash
+set -euo pipefail
+umask 077
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+/snap/bin/aws ssm get-parameter --region ap-northeast-2 \
+  --name ${peers_param} --query Parameter.Value --output text | cat > "$tmp"
+[ -s "$tmp" ] || { echo "빈 피어 목록 수신, 중단" >&2; exit 1; }
+{
+  echo "[Interface]"
+  echo "Address = 10.100.12.254/24"
+  echo "ListenPort = 51830"
+  echo "PrivateKey = $(cat /etc/wireguard/wg2.key)"
+  echo "PostUp = /usr/local/bin/hub-fw"
+  echo
+  cat "$tmp"
+} > /etc/wireguard/wg2.conf
+if systemctl is-active --quiet wg-quick@wg2; then
+  wg syncconf wg2 <(wg-quick strip wg2)      # 연결 끊지 않고 피어만 갱신
+else
+  systemctl enable --now wg-quick@wg2        # 재부팅 시 자동 시작
+fi
+# syncconf는 라우트를 만들지 않음 → 피어 대역마다 wg2 라우트 보장
+wg show wg2 allowed-ips | awk '{for(i=2;i<=NF;i++) print $i}' | \
+  while read -r net; do ip route replace "$net" dev wg2; done
+APPLY
+chmod +x /usr/local/bin/wg-apply
+/usr/local/bin/wg-apply
