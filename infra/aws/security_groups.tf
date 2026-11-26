@@ -38,10 +38,11 @@ resource "aws_security_group" "edge" {
   tags = { Name = "jammy-edge-sg", Component = "edge" }
 }
 
-# 건물 공인 IP가 정해지면 /32로 좁힘 (고정 IP 여부 확인 중, #52)
+# 건물 공인 IP /32 — 값은 커밋하지 않음: 로컬 terraform.tfvars, CI는 시크릿 SITE_PUBLIC_CIDRS (#55)
 variable "site_public_cidrs" {
-  type    = list(string)
-  default = ["0.0.0.0/0"] # 등록 안 된 키의 패킷에는 응답 안 함
+  type        = list(string)
+  description = "WireGuard 접속을 허용할 거점 건물 공인 IP 목록"
+  sensitive   = true
 }
 
 resource "aws_security_group" "hub" {

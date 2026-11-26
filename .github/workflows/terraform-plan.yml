@@ -37,6 +37,8 @@ jobs:
       - run: terraform init -input=false
 
       - name: plan
+        env:
+          TF_VAR_site_public_cidrs: ${{ secrets.SITE_PUBLIC_CIDRS }}   # 예: ["x.x.x.x/32"]
         run: |
           terraform plan -input=false -no-color -out=tfplan
           {
