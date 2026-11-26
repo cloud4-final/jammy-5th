@@ -1,0 +1,66 @@
+name: coderabbit-trigger
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  checks: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: coderabbit-trigger-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger CodeRabbit review when OSS auto-review is skipped
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODERABBIT_TRIGGER_TOKEN: ${{ secrets.CODERABBIT_TRIGGER_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$CODERABBIT_TRIGGER_TOKEN" ]; then
+            echo "::warning::CODERABBIT_TRIGGER_TOKEN secret is not configured; skipping automatic CodeRabbit trigger."
+            exit 0
+          fi
+
+          # CodeRabbit check-run이 기록될 때까지 최대 60초 대기
+          conclusion=""
+          title=""
+          for _ in $(seq 1 12); do
+            cr_info="$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" \
+              --jq '[.check_runs[] | select(.name == "CodeRabbit")] | last | "\(.conclusion // "")|\(.output.title // "")"')"
+            conclusion="${cr_info%%|*}"
+            title="${cr_info#*|}"
+            if [ -n "$conclusion" ]; then
+              break
+            fi
+            sleep 5
+          done
+
+          if [ "$conclusion" != "skipped" ] || [[ "$title" != *"manual review required"* ]]; then
+            echo "CodeRabbit check is '${conclusion:-pending}' (${title}); skipping manual trigger."
+            exit 0
+          fi
+
+          marker="<!-- auto-coderabbit-trigger:${HEAD_SHA} -->"
+          comments_bodies="$(gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments" --jq '.[].body')"
+          if printf '%s\n' "$comments_bodies" | grep -Fq "$marker"; then
+            echo "Already triggered CodeRabbit for ${HEAD_SHA}."
+            exit 0
+          fi
+
+          body="$(printf '@coderabbitai review\n%s' "$marker")"
+          GH_TOKEN="$CODERABBIT_TRIGGER_TOKEN" gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$body"
