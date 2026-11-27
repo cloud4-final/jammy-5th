@@ -1,0 +1,12 @@
+vm_name: app-collect1
+vm_vcpus: 4
+vm_memory_mib: 8192
+vm_disk_gib: 20
+
+vm_bridge: br-svc
+vm_ip_cidr: 10.11.10.2/24
+vm_gateway: 10.11.10.254
+vm_mac: "52:54:00:0b:0a:02"
+
+vm_extra_disks:
+  - /dev/vg-fast/raw

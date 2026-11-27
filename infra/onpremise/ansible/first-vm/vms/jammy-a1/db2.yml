@@ -1,0 +1,12 @@
+vm_name: db2
+vm_vcpus: 4
+vm_memory_mib: 12288
+vm_disk_gib: 20
+
+vm_bridge: br-data
+vm_ip_cidr: 10.11.21.1/24
+vm_gateway: 10.11.21.254
+vm_mac: "52:54:00:0b:15:01"
+
+vm_extra_disks:
+  - /dev/vg-fast/pg-data
