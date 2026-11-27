@@ -67,6 +67,12 @@ resource "aws_iam_role_policy" "edge_ssm_minimal" {
           "arn:aws:ssm:ap-northeast-2:${data.aws_caller_identity.current.account_id}:parameter/jammy/edge/*",
         ]
       },
+      {
+        Sid      = "SaveOwnWgKey" # 첫 부팅 때 만든 wg-aws 키 저장 (입구 키 2개만, #46)
+        Effect   = "Allow"
+        Action   = "ssm:PutParameter"
+        Resource = [for k in local.edges : aws_ssm_parameter.edge_wg_private_key[k].arn]
+      },
     ]
   })
 }

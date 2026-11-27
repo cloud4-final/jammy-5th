@@ -12,6 +12,9 @@ variable "edge_ami_id" {
 # 입구 서버 목록: 서브넷 이름과 같게
 locals {
   edges = toset(["a", "c"])
+
+  # wg-aws 터널 주소: 거점 호스트 설정의 피어 주소와 같아야 함 (#46)
+  edge_wg_address = { a = "10.100.0.11", c = "10.100.0.12" }
 }
 
 resource "aws_instance" "edge" {
@@ -28,9 +31,12 @@ resource "aws_instance" "edge" {
 
   # 템플릿 빈칸 채우기
   user_data = templatefile("${path.module}/userdata/edge.sh.tftpl", {
-    hostname  = "jammy-edge-${each.key}"
-    ts_param  = "/jammy/tailscale/edge-authkey-${each.key}"
-    cfg_param = aws_ssm_parameter.haproxy_cfg.name
+    hostname       = "jammy-edge-${each.key}"
+    ts_param       = "/jammy/tailscale/edge-authkey-${each.key}"
+    cfg_param      = aws_ssm_parameter.haproxy_cfg.name
+    wg_key_param   = aws_ssm_parameter.edge_wg_private_key[each.key].name # 자기 키 경로만
+    wg_peers_param = aws_ssm_parameter.edge_wg_peers.name
+    wg_address     = local.edge_wg_address[each.key]
   })
   user_data_replace_on_change = true
 
@@ -74,4 +80,26 @@ resource "aws_ssm_parameter" "haproxy_cfg" {
   tier  = "Standard"                               # 무료, 최대 4KB
   value = file("${path.module}/files/haproxy.cfg") # 레포 파일 내용을 그대로 올림
   tags  = { Name = "jammy-edge-haproxy-cfg", Component = "edge" }
+}
+
+# 입구 wg-aws 개인키: 자리만 만들고 값은 입구가 첫 부팅 때 생성 (교체해도 같은 키, #46)
+resource "aws_ssm_parameter" "edge_wg_private_key" {
+  for_each = local.edges
+  name     = "/jammy/edge/wg-private-key-${each.key}"
+  type     = "SecureString"
+  value    = "placeholder"
+  tags     = { Name = "jammy-edge-${each.key}-wg-private-key", Component = "edge" }
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
+# 입구 wg-aws 피어 목록(거점 호스트 5대): 비밀 아님, a·c 공용
+resource "aws_ssm_parameter" "edge_wg_peers" {
+  name  = "/jammy/edge/wg-peers"
+  type  = "String"
+  tier  = "Standard"
+  value = file("${path.module}/files/wg-edge-peers.conf")
+  tags  = { Name = "jammy-edge-wg-peers", Component = "edge" }
 }

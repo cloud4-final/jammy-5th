@@ -27,6 +27,14 @@ resource "aws_security_group" "edge" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  ingress {
+    description = "WireGuard wg-aws from sites" # 거점 호스트 5대가 먼저 접속 (#46)
+    from_port   = 51820
+    to_port     = 51820
+    protocol    = "udp"
+    cidr_blocks = var.site_public_cidrs
+  }
+
   egress {
     description = "All outbound" # 서버에서 밖으로 나가는 건 전부 허용
     from_port   = 0
